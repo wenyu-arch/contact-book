@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>電子聯絡本</title>
+  <style>
+    :root {
+      --bg-color: #1e3a2b;       /* 日系深綠色背景 */
+      --card-bg: rgba(255, 255, 255, 0.05);
+      --text-color: #f7f5f0;     /* 米白字體 */
+      --accent-color: #e2c044;   /* 金黃重點色 */
+      --border-color: #3d5a4b;
+    }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: "Helvetica Neue", "PingFang TC", "Noto Sans TC", sans-serif;
+      box-sizing: border-box;
+    }
+
+    .board-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      border: 3px solid var(--border-color);
+      border-radius: 12px;
+      padding: 25px 30px;
+      background: var(--bg-color);
+      box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+    }
+
+    /* 正中央標頭 */
+    .header {
+      text-align: center;
+      border-bottom: 2px dashed var(--border-color);
+      padding-bottom: 15px;
+      margin-bottom: 15px;
+    }
+
+    .main-title {
+      font-size: 2.2rem;
+      font-weight: bold;
+      letter-spacing: 2px;
+      margin-bottom: 6px;
+    }
+
+    .date-display {
+      font-size: 1.3rem;
+      color: var(--accent-color);
+    }
+
+    /* 列表區：無行間距 (gap: 0) */
+    .item-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      min-height: 350px;
+    }
+
+    .item-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--card-bg);
+      padding: 8px 15px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .item-no {
+      width: 40px;
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: var(--accent-color);
+      background: transparent;
+      border: none;
+      text-align: center;
+    }
+
+    .item-category {
+      padding: 5px 10px;
+      font-size: 1.05rem;
+      border-radius: 4px;
+      background-color: #2e523f;
+      color: #fff;
+      border: 1px solid var(--border-color);
+      outline: none;
+    }
+
+    .item-text {
+      flex-grow: 1;
+      font-size: 1.25rem;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid rgba(255,255,255,0.15);
+      color: var(--text-color);
+      padding: 4px 8px;
+      outline: none;
+    }
+
+    .btn-danger {
+      background: #7a3232;
+      color: white;
+      border: none;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    /* 控制按鈕區 */
+    .controls {
+      margin-top: 20px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .btn {
+      padding: 10px 18px;
+      font-size: 1rem;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+      transition: opacity 0.2s;
+    }
+
+    .btn:hover {
+      opacity: 0.9;
+    }
+
+    .btn-add { background: #3b6e52; color: white; }
+    .btn-clear { background: #5a3d3d; color: #f7f5f0; }
+    .btn-save { background: var(--accent-color); color: #1e3a2b; }
+    .loading-tip { text-align: center; color: var(--accent-color); margin-bottom: 10px; font-size: 1.1rem; }
+  </style>
+</head>
+<body>
+
+<div class="board-container">
+  <div class="header">
+    <div class="main-title">電子聯絡本</div>
+    <div class="date-display" id="currentDate"></div>
+  </div>
+
+  <div id="statusTip" class="loading-tip">正在讀取最新資料...</div>
+
+  <div class="item-list" id="itemList"></div>
+
+  <div class="controls">
+    <div>
+      <button class="btn btn-add" onclick="addItem()">+ 新增項目</button>
+      <button class="btn btn-clear" onclick="clearAllItems()">🗑️ 一鍵清除</button>
+    </div>
+    <div>
+      <button class="btn btn-save" onclick="saveData()">💾 儲存並發布</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 已替換為您的 Google Apps Script API 網址
+  const API_URL = "https://script.google.com/macros/s/AKfycbyg8ho4ufmjMt1NF3utcB9RQi-UXgUgchG1yu3wpw6iO9lolwLOuzVhRjrvTTrwBRbkhQ/exec";
+
+  // 自動顯示今日日期
+  document.getElementById('currentDate').innerText = new Date().toLocaleDateString('zh-TW', {
+    year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
+  });
+
+  // 頁面載入時自動向上傳的 Google 試算表抓取最新聯絡本內容
+  window.onload = function() {
+    fetch(API_URL)
+      .then(res => res.json())
+      .then(data => {
+        document.getElementById('statusTip').innerText = "";
+        document.getElementById('itemList').innerHTML = '';
+        if (data.items && data.items.length > 0) {
+          data.items.forEach(item => addItem(item.category, item.text));
+        } else {
+          addItem(); // 若無歷史資料，預設顯示第一行
+        }
+      })
+      .catch(err => {
+        document.getElementById('statusTip').innerText = "";
+        addItem();
+      });
+  };
+
+  // 新增項目列
+  function addItem(category = '作業', text = '') {
+    const list = document.getElementById('itemList');
+    const count = list.children.length + 1;
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    
+    row.innerHTML = `
+      <input type="text" class="item-no" value="${count}.">
+      <select class="item-category">
+        <option value="作業" ${category === '作業' ? 'selected' : ''}>作業</option>
+        <option value="考試" ${category === '考試' ? 'selected' : ''}>考試</option>
+        <option value="訂正" ${category === '訂正' ? 'selected' : ''}>訂正</option>
+        <option value="檢查" ${category === '檢查' ? 'selected' : ''}>檢查</option>
+        <option value="攜帶" ${category === '攜帶' ? 'selected' : ''}>攜帶</option>
+        <option value="繳交" ${category === '繳交' ? 'selected' : ''}>繳交</option>
+        <option value="發下" ${category === '發下' ? 'selected' : ''}>發下</option>
+      </select>
+      <input type="text" class="item-text" value="${text}" placeholder="請輸入詳細內容...">
+      <button class="btn-danger" onclick="this.parentElement.remove()">刪除</button>
+    `;
+    list.appendChild(row);
+  }
+
+  // 一鍵清除
+  function clearAllItems() {
+    if (confirm('確定要清空今天的內容嗎？')) {
+      document.getElementById('itemList').innerHTML = '';
+      addItem();
+    }
+  }
+
+  // 按下「儲存並發布」將內容同步上傳至 Google 試算表
+  function saveData() {
+    const rows = document.querySelectorAll('.item-row');
+    const items = [];
+    
+    rows.forEach(row => {
+      const category = row.querySelector('.item-category').value;
+      const text = row.querySelector('.item-text').value;
+      if (text.trim() !== "") {
+        items.push({ category, text });
+      }
+    });
+
+    const payload = {
+      date: new Date().toLocaleDateString('zh-TW'),
+      items: items
+    };
+
+    document.getElementById('statusTip').innerText = "資料儲存中...";
+
+    fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(result => {
+      document.getElementById('statusTip').innerText = "";
+      alert('已成功儲存！內容已同步發布至雲端。');
+    })
+    .catch(err => {
+      document.getElementById('statusTip').innerText = "";
+      alert('儲存失敗，請檢查網路或驗證 Google Apps Script 部署權限設定。');
+    });
+  }
+</script>
+
+</body>
+</html>
